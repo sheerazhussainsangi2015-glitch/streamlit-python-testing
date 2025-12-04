@@ -345,7 +345,7 @@ def main():
                         st.session_state.last_error = str(e)
             
             with col2:
-                if st.button("🗑️ Clear Data", type="secondary", use_container_width=True):
+                if st.button("🗑️ reset", type="secondary", use_container_width=True):
                     # Clear all session state
                     for key in list(st.session_state.keys()):
                         del st.session_state[key]
