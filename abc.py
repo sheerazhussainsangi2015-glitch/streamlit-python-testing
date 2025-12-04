@@ -45,9 +45,9 @@ def process_data(df, start_date=None, end_date=None, selected_devices=None):
                 'Device', 'Offline_Time', 'Online_Time', 
                 'Downtime_Duration', 'Downtime_Status'
             ])
-            return empty_summary, empty_downtime
+            return empty_summary, empty_downtime, pd.Timestamp.now()
         
-        # Process downtime
+        # Process downtime - use current time consistently
         current_time = pd.Timestamp.now()
         
         df_downtime = (
@@ -90,7 +90,7 @@ def process_data(df, start_date=None, end_date=None, selected_devices=None):
                 'Total_Downtime_Duration'
             ])
             # Return empty dataframes
-            return empty_summary, df_downtime
+            return empty_summary, df_downtime, current_time
         
         # Fix misclassified records
         mask = (df_downtime['Online_Time'].notna()) & (df_downtime['Downtime_Status'] == 'Ongoing')
@@ -104,8 +104,15 @@ def process_data(df, start_date=None, end_date=None, selected_devices=None):
                 elif pd.notna(row['Online_Time']):
                     return (row['Online_Time'] - row['Offline_Time']).total_seconds()
                 else:
-                    return (current_time - row['Offline_Time']).total_seconds()
-            except:
+                    # Calculate exact difference from offline time to current time
+                    offline_time = row['Offline_Time']
+                    if isinstance(offline_time, pd.Timestamp):
+                        return (current_time - offline_time).total_seconds()
+                    else:
+                        # Handle string or other datetime formats
+                        offline_time = pd.to_datetime(offline_time)
+                        return (current_time - offline_time).total_seconds()
+            except Exception as e:
                 return 0
         
         # Safely assign Downtime_Seconds
@@ -123,7 +130,7 @@ def process_data(df, start_date=None, end_date=None, selected_devices=None):
                 'Total_DownTime_Events', 'Current_Downtime_Duration', 
                 'Total_Downtime_Duration'
             ])
-            return empty_summary, df_downtime
+            return empty_summary, df_downtime, analysis_time
         
         summary = (
             df_downtime.groupby('Device')
@@ -143,7 +150,7 @@ def process_data(df, start_date=None, end_date=None, selected_devices=None):
                 'Total_DownTime_Events', 'Current_Downtime_Duration', 
                 'Total_Downtime_Duration'
             ])
-            return empty_summary, df_downtime
+            return empty_summary, df_downtime, analysis_time
         
         summary.columns = [
             'Device', 'Last_Offline_Time', 'Last_Online_Time',
@@ -152,11 +159,23 @@ def process_data(df, start_date=None, end_date=None, selected_devices=None):
         
         # Convert to appropriate types with error handling
         summary['Total_Downtime_Seconds'] = pd.to_numeric(summary['Total_Downtime_Seconds'], errors='coerce').fillna(0).round(0)
-        summary['Current_Downtime_Seconds'] = np.where(
-            summary['Ongoing_Count'] > 0,
-            (analysis_time - pd.to_datetime(summary['Last_Offline_Time'])).dt.total_seconds().round(0),
-            np.nan
-        )
+        
+        # Calculate current downtime accurately
+        def calculate_current_downtime(row):
+            try:
+                if row['Ongoing_Count'] > 0:
+                    offline_time = row['Last_Offline_Time']
+                    if isinstance(offline_time, pd.Timestamp):
+                        return (analysis_time - offline_time).total_seconds()
+                    else:
+                        offline_time = pd.to_datetime(offline_time)
+                        return (analysis_time - offline_time).total_seconds()
+                else:
+                    return np.nan
+            except:
+                return np.nan
+        
+        summary['Current_Downtime_Seconds'] = summary.apply(calculate_current_downtime, axis=1).round(0)
         
         # Ensure Total >= Current for ongoing devices
         ongoing_mask = summary['Ongoing_Count'] > 0
@@ -176,7 +195,7 @@ def process_data(df, start_date=None, end_date=None, selected_devices=None):
         # Select only needed columns for downtime table (remove Downtime_Seconds)
         df_downtime_display = df_downtime[['Device', 'Offline_Time', 'Online_Time', 'Downtime_Duration', 'Downtime_Status']]
         
-        return summary, df_downtime_display
+        return summary, df_downtime_display, analysis_time
     
     except Exception as e:
         st.error(f"Error in process_data: {str(e)}")
@@ -190,11 +209,20 @@ def process_data(df, start_date=None, end_date=None, selected_devices=None):
             'Device', 'Offline_Time', 'Online_Time', 
             'Downtime_Duration', 'Downtime_Status'
         ])
-        return empty_summary, empty_downtime
+        return empty_summary, empty_downtime, pd.Timestamp.now()
 
 # Streamlit App
 def main():
     st.set_page_config(page_title="Device Downtime Report", layout="wide")
+    
+    # Add timestamp display at the top with small font
+    current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    st.markdown(
+        f'<div style="text-align: right; font-size: 0.8em; color: #666; margin-bottom: 10px;">'
+        f'⏰ Analysis time: {current_time}'
+        f'</div>',
+        unsafe_allow_html=True
+    )
     
     st.title("📊 Device Downtime Report")
     
@@ -203,6 +231,8 @@ def main():
         st.session_state.summary_status_filter = "All"
     if 'downtime_status_filter' not in st.session_state:
         st.session_state.downtime_status_filter = "All"
+    if 'analysis_time' not in st.session_state:
+        st.session_state.analysis_time = None
     
     # Initialize session state
     if 'processed' not in st.session_state:
@@ -223,7 +253,8 @@ def main():
                                              "processed": False,
                                              "last_error": None,
                                              "summary_status_filter": "All",  # Reset filter on new file
-                                             "downtime_status_filter": "All"  # Reset filter on new file
+                                             "downtime_status_filter": "All",  # Reset filter on new file
+                                             "analysis_time": None  # Reset analysis time
                                          }))
         
         # Auto-process when file is uploaded (shows all devices by default)
@@ -262,7 +293,7 @@ def main():
                     all_devices = sorted(df['Device Name'].unique())
                     
                     # Process with ALL devices selected (empty list means all devices)
-                    summary, downtime = process_data(
+                    summary, downtime, analysis_time = process_data(
                         df.copy(),
                         pd.to_datetime(min_date),
                         pd.to_datetime(max_date),
@@ -272,6 +303,7 @@ def main():
                     # Store in session state
                     st.session_state.summary = summary
                     st.session_state.downtime = downtime
+                    st.session_state.analysis_time = analysis_time
                     st.session_state.processed = True
                     
                     st.success(f"File loaded and processed successfully!")
@@ -323,7 +355,7 @@ def main():
                     try:
                         with st.spinner("Updating report with new filters..."):
                             # If no devices selected, process ALL devices (empty list)
-                            summary, downtime = process_data(
+                            summary, downtime, analysis_time = process_data(
                                 df.copy(),
                                 pd.to_datetime(start_date),
                                 pd.to_datetime(end_date),
@@ -337,6 +369,7 @@ def main():
                                 # Update session state
                                 st.session_state.summary = summary
                                 st.session_state.downtime = downtime
+                                st.session_state.analysis_time = analysis_time
                                 st.session_state.processed = True
                                 st.success("✅ Refreshed!")
                             
@@ -365,6 +398,11 @@ def main():
     if 'processed' in st.session_state and st.session_state.processed:
         summary = st.session_state.summary
         downtime = st.session_state.downtime
+        
+        # Show analysis time in the main area too (with more prominence)
+        if st.session_state.analysis_time is not None:
+            analysis_time_str = st.session_state.analysis_time.strftime("%Y-%m-%d %H:%M:%S")
+            st.info(f"📊 **Report Analysis Time:** {analysis_time_str}")
         
         # Check if we have data
         if summary.empty and downtime.empty:
