@@ -370,8 +370,6 @@ def main():
         if summary.empty and downtime.empty:
             st.warning("⚠️ No data found for the selected filters. Please adjust your criteria in the sidebar.")
         else:
-            # Display table shapes and total devices at the top
-            st.subheader("📈 Report Overview")
             
             # Calculate online and offline counts
             total_online = len(summary[summary['Current_Status'] == '✔️ Online']) if not summary.empty else 0
