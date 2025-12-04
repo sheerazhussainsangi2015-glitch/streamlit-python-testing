@@ -18,11 +18,11 @@ def format_duration(seconds):
         return f"{days}d {hours:02d}:{minutes:02d}:{secs:02d}"
     return f"{hours:02d}:{minutes:02d}:{secs:02d}"
 
-# Get Pakistan Karachi time
-def get_pakistan_time():
-    # Pakistan uses UTC+5 (Karachi time)
-    pakistan_tz = pytz.timezone('Asia/Karachi')
-    return datetime.now(pakistan_tz)
+# Get Ghana time (Africa/Accra - GMT/UTC+0)
+def get_ghana_time():
+    # Ghana uses GMT/UTC (Accra time - no daylight saving)
+    ghana_tz = pytz.timezone('Africa/Accra')
+    return datetime.now(ghana_tz)
 
 # Process data function with error handling
 def process_data(df, start_date=None, end_date=None, selected_devices=None):
@@ -52,10 +52,10 @@ def process_data(df, start_date=None, end_date=None, selected_devices=None):
                 'Device', 'Offline_Time', 'Online_Time', 
                 'Downtime_Duration', 'Downtime_Status'
             ])
-            return empty_summary, empty_downtime, get_pakistan_time()
+            return empty_summary, empty_downtime, get_ghana_time()
         
-        # Process downtime - use Pakistan time consistently
-        current_time = pd.Timestamp.now(tz='Asia/Karachi')
+        # Process downtime - use Ghana time consistently
+        current_time = pd.Timestamp.now(tz='Africa/Accra')
         
         df_downtime = (
             df
@@ -111,7 +111,7 @@ def process_data(df, start_date=None, end_date=None, selected_devices=None):
                 elif pd.notna(row['Online_Time']):
                     return (row['Online_Time'] - row['Offline_Time']).total_seconds()
                 else:
-                    # Calculate exact difference from offline time to current Pakistan time
+                    # Calculate exact difference from offline time to current Ghana time
                     offline_time = row['Offline_Time']
                     if isinstance(offline_time, pd.Timestamp):
                         # Ensure offline_time has no timezone for consistent calculation
@@ -130,8 +130,8 @@ def process_data(df, start_date=None, end_date=None, selected_devices=None):
         df_downtime.loc[:, 'Downtime_Seconds'] = df_downtime.apply(recalculate_downtime, axis=1)
         df_downtime.loc[:, 'Downtime_Duration'] = df_downtime['Downtime_Seconds'].apply(format_duration)
         
-        # Create summary with Pakistan time
-        analysis_time = pd.Timestamp.now(tz='Asia/Karachi')
+        # Create summary with Ghana time
+        analysis_time = pd.Timestamp.now(tz='Africa/Accra')
         
         # Check if we have data to group
         if df_downtime['Device'].nunique() == 0:
@@ -170,7 +170,7 @@ def process_data(df, start_date=None, end_date=None, selected_devices=None):
         # Convert to appropriate types with error handling
         summary['Total_Downtime_Seconds'] = pd.to_numeric(summary['Total_Downtime_Seconds'], errors='coerce').fillna(0).round(0)
         
-        # Calculate current downtime accurately using Pakistan time
+        # Calculate current downtime accurately using Ghana time
         def calculate_current_downtime(row):
             try:
                 if row['Ongoing_Count'] > 0:
@@ -222,20 +222,20 @@ def process_data(df, start_date=None, end_date=None, selected_devices=None):
             'Device', 'Offline_Time', 'Online_Time', 
             'Downtime_Duration', 'Downtime_Status'
         ])
-        return empty_summary, empty_downtime, get_pakistan_time()
+        return empty_summary, empty_downtime, get_ghana_time()
 
 # Streamlit App
 def main():
     st.set_page_config(page_title="Device Downtime Report", layout="wide")
     
-    # Get Pakistan Karachi time
-    pakistan_time = get_pakistan_time()
-    current_time_str = pakistan_time.strftime("%Y-%m-%d %H:%M:%S %Z")
+    # Get Ghana time
+    ghana_time = get_ghana_time()
+    current_time_str = ghana_time.strftime("%Y-%m-%d %H:%M:%S %Z")
     
-    # Add timestamp display at the top with small font - shows Pakistan time
+    # Add timestamp display at the top with small font - shows Ghana time
     st.markdown(
         f'<div style="text-align: right; font-size: 0.8em; color: #666; margin-bottom: 10px;">'
-        f'⏰ Analysis time (Pakistan/Karachi): {current_time_str}'
+        f'⏰ Analysis time (Ghana/Accra): {current_time_str}'
         f'</div>',
         unsafe_allow_html=True
     )
@@ -415,17 +415,7 @@ def main():
         summary = st.session_state.summary
         downtime = st.session_state.downtime
         
-        # Show analysis time in the main area too (with more prominence)
-        if st.session_state.analysis_time is not None:
-            # Convert to Pakistan timezone if needed
-            if st.session_state.analysis_time.tz is None:
-                pakistan_tz = pytz.timezone('Asia/Karachi')
-                analysis_time = st.session_state.analysis_time.tz_localize(pakistan_tz)
-            else:
-                analysis_time = st.session_state.analysis_time
-            
-            analysis_time_str = analysis_time.strftime("%Y-%m-%d %H:%M:%S %Z")
-            #st.info(f"📊 **Report Analysis Time (Pakistan/Karachi):** {analysis_time_str}")
+        # REMOVED THE EXTRA INFO LINE HERE
         
         # Check if we have data
         if summary.empty and downtime.empty:
