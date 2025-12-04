@@ -3,6 +3,7 @@ import numpy as np
 import streamlit as st
 from datetime import datetime, timedelta
 import pytz
+import io 
 
 # Format duration function
 def format_duration(seconds):
@@ -490,12 +491,17 @@ def main():
                 else:
                     download_summary = display_summary
                 
-                csv_summary = download_summary.to_csv(index=False).encode('utf-8')
+                # Create Excel file in memory
+                excel_buffer = io.BytesIO()
+                with pd.ExcelWriter(excel_buffer, engine='openpyxl') as writer:
+                    download_summary.to_excel(writer, sheet_name='Summary', index=False)
+                excel_data = excel_buffer.getvalue()
+                
                 st.download_button(
-                    label="📥 Download Summary CSV",
-                    data=csv_summary,
-                    file_name=f"summary_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
-                    mime='text/csv',
+                    label="📥 Download Summary Excel",
+                    data=excel_data,
+                    file_name=f"summary_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx",
+                    mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
                     use_container_width=True
                 )
             else:
@@ -546,12 +552,17 @@ def main():
                 else:
                     download_downtime = downtime
                 
-                csv_downtime = download_downtime.to_csv(index=False).encode('utf-8')
+                # Create Excel file in memory for downtime data
+                excel_buffer = io.BytesIO()
+                with pd.ExcelWriter(excel_buffer, engine='openpyxl') as writer:
+                    download_downtime.to_excel(writer, sheet_name='Downtime Events', index=False)
+                excel_data = excel_buffer.getvalue()
+                
                 st.download_button(
-                    label="📥 Download Downtime CSV",
-                    data=csv_downtime,
-                    file_name=f"downtime_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
-                    mime='text/csv',
+                    label="📥 Download Downtime Excel",
+                    data=excel_data,
+                    file_name=f"downtime_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx",
+                    mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
                     use_container_width=True
                 )
             else:
