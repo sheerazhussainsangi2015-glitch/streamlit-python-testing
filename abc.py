@@ -319,7 +319,7 @@ def main():
             # Refresh Report button
             col1, col2 = st.columns([1, 1])
             with col1:
-                if st.button("🔄 Refresh", use_container_width=True):
+                if st.button("🔄 Reset", use_container_width=True):
                     try:
                         with st.spinner("Updating report with new filters..."):
                             # If no devices selected, process ALL devices (empty list)
