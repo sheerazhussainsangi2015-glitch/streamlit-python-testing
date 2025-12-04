@@ -2,6 +2,7 @@ import pandas as pd
 import numpy as np
 import streamlit as st
 from datetime import datetime, timedelta
+import pytz
 
 # Format duration function
 def format_duration(seconds):
@@ -16,6 +17,12 @@ def format_duration(seconds):
     if days > 0:
         return f"{days}d {hours:02d}:{minutes:02d}:{secs:02d}"
     return f"{hours:02d}:{minutes:02d}:{secs:02d}"
+
+# Get Pakistan Karachi time
+def get_pakistan_time():
+    # Pakistan uses UTC+5 (Karachi time)
+    pakistan_tz = pytz.timezone('Asia/Karachi')
+    return datetime.now(pakistan_tz)
 
 # Process data function with error handling
 def process_data(df, start_date=None, end_date=None, selected_devices=None):
@@ -45,10 +52,10 @@ def process_data(df, start_date=None, end_date=None, selected_devices=None):
                 'Device', 'Offline_Time', 'Online_Time', 
                 'Downtime_Duration', 'Downtime_Status'
             ])
-            return empty_summary, empty_downtime, pd.Timestamp.now()
+            return empty_summary, empty_downtime, get_pakistan_time()
         
-        # Process downtime - use current time consistently
-        current_time = pd.Timestamp.now()
+        # Process downtime - use Pakistan time consistently
+        current_time = pd.Timestamp.now(tz='Asia/Karachi')
         
         df_downtime = (
             df
@@ -104,14 +111,17 @@ def process_data(df, start_date=None, end_date=None, selected_devices=None):
                 elif pd.notna(row['Online_Time']):
                     return (row['Online_Time'] - row['Offline_Time']).total_seconds()
                 else:
-                    # Calculate exact difference from offline time to current time
+                    # Calculate exact difference from offline time to current Pakistan time
                     offline_time = row['Offline_Time']
                     if isinstance(offline_time, pd.Timestamp):
-                        return (current_time - offline_time).total_seconds()
+                        # Ensure offline_time has no timezone for consistent calculation
+                        if offline_time.tz is not None:
+                            offline_time = offline_time.tz_localize(None)
+                        return (current_time.tz_localize(None) - offline_time).total_seconds()
                     else:
                         # Handle string or other datetime formats
                         offline_time = pd.to_datetime(offline_time)
-                        return (current_time - offline_time).total_seconds()
+                        return (current_time.tz_localize(None) - offline_time).total_seconds()
             except Exception as e:
                 return 0
         
@@ -120,8 +130,8 @@ def process_data(df, start_date=None, end_date=None, selected_devices=None):
         df_downtime.loc[:, 'Downtime_Seconds'] = df_downtime.apply(recalculate_downtime, axis=1)
         df_downtime.loc[:, 'Downtime_Duration'] = df_downtime['Downtime_Seconds'].apply(format_duration)
         
-        # Create summary
-        analysis_time = pd.Timestamp.now()
+        # Create summary with Pakistan time
+        analysis_time = pd.Timestamp.now(tz='Asia/Karachi')
         
         # Check if we have data to group
         if df_downtime['Device'].nunique() == 0:
@@ -160,16 +170,19 @@ def process_data(df, start_date=None, end_date=None, selected_devices=None):
         # Convert to appropriate types with error handling
         summary['Total_Downtime_Seconds'] = pd.to_numeric(summary['Total_Downtime_Seconds'], errors='coerce').fillna(0).round(0)
         
-        # Calculate current downtime accurately
+        # Calculate current downtime accurately using Pakistan time
         def calculate_current_downtime(row):
             try:
                 if row['Ongoing_Count'] > 0:
                     offline_time = row['Last_Offline_Time']
                     if isinstance(offline_time, pd.Timestamp):
-                        return (analysis_time - offline_time).total_seconds()
+                        # Ensure offline_time has no timezone for consistent calculation
+                        if offline_time.tz is not None:
+                            offline_time = offline_time.tz_localize(None)
+                        return (analysis_time.tz_localize(None) - offline_time).total_seconds()
                     else:
                         offline_time = pd.to_datetime(offline_time)
-                        return (analysis_time - offline_time).total_seconds()
+                        return (analysis_time.tz_localize(None) - offline_time).total_seconds()
                 else:
                     return np.nan
             except:
@@ -209,17 +222,20 @@ def process_data(df, start_date=None, end_date=None, selected_devices=None):
             'Device', 'Offline_Time', 'Online_Time', 
             'Downtime_Duration', 'Downtime_Status'
         ])
-        return empty_summary, empty_downtime, pd.Timestamp.now()
+        return empty_summary, empty_downtime, get_pakistan_time()
 
 # Streamlit App
 def main():
     st.set_page_config(page_title="Device Downtime Report", layout="wide")
     
-    # Add timestamp display at the top with small font
-    current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    # Get Pakistan Karachi time
+    pakistan_time = get_pakistan_time()
+    current_time_str = pakistan_time.strftime("%Y-%m-%d %H:%M:%S %Z")
+    
+    # Add timestamp display at the top with small font - shows Pakistan time
     st.markdown(
         f'<div style="text-align: right; font-size: 0.8em; color: #666; margin-bottom: 10px;">'
-        f'⏰ Analysis time: {current_time}'
+        f'⏰ Analysis time (Pakistan/Karachi): {current_time_str}'
         f'</div>',
         unsafe_allow_html=True
     )
@@ -401,8 +417,15 @@ def main():
         
         # Show analysis time in the main area too (with more prominence)
         if st.session_state.analysis_time is not None:
-            analysis_time_str = st.session_state.analysis_time.strftime("%Y-%m-%d %H:%M:%S")
-            st.info(f"📊 **Report Analysis Time:** {analysis_time_str}")
+            # Convert to Pakistan timezone if needed
+            if st.session_state.analysis_time.tz is None:
+                pakistan_tz = pytz.timezone('Asia/Karachi')
+                analysis_time = st.session_state.analysis_time.tz_localize(pakistan_tz)
+            else:
+                analysis_time = st.session_state.analysis_time
+            
+            analysis_time_str = analysis_time.strftime("%Y-%m-%d %H:%M:%S %Z")
+            #st.info(f"📊 **Report Analysis Time (Pakistan/Karachi):** {analysis_time_str}")
         
         # Check if we have data
         if summary.empty and downtime.empty:
