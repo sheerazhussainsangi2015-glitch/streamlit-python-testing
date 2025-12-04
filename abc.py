@@ -338,7 +338,7 @@ def main():
                                 st.session_state.summary = summary
                                 st.session_state.downtime = downtime
                                 st.session_state.processed = True
-                                st.success("✅ Refreshed!")
+                                st.success("✅ Reset!")
                             
                     except Exception as e:
                         st.error(f"❌ Error updating report: {str(e)}")
